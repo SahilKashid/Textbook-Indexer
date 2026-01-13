@@ -82,12 +82,14 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
          
          const targetPage = newPdf.getPages()[targetPageIdx];
          
+         // Create a link annotation that is invisible (no border)
          const linkDict = newPdf.context.obj({
              Type: 'Annot',
              Subtype: 'Link',
-             Rect: [x, y, x + w, y + h],
-             Border: [0, 0, 0], // No border visible
-             Dest: [targetPage.ref, 'XYZ', null, null, null], 
+             // Adjust rect to better cover the text (slightly lower bottom to catch descenders)
+             Rect: [x, y - 2, x + w, y + h + 2], 
+             Border: [0, 0, 0], // No visual border
+             Dest: [targetPage.ref, 'XYZ', null, null, null], // Go to page, maintain zoom
          });
          
          const linkRef = newPdf.context.register(linkDict);
