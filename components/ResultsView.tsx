@@ -207,10 +207,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
              const term = sanitize(item.term);
              const termLines = wrapText(term, colWidth, boldFont, 10);
              
-             // Removed context logic
-             const totalH = (termLines.length * 11) + 12;
+             // Estimate height (term lines + 1 line for page nums buffer)
+             const totalH = (termLines.length * 11) + 15;
 
-             // Check overflow
+             // Check overflow (New Page/Column if needed)
              if (targetY - totalH < margin) {
                 if (currentCol === 0) {
                     currentCol = 1; targetY = cursorY; y1 = targetY;
@@ -223,47 +223,69 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
              const drawX = margin + (currentCol * (colWidth + colGap));
              
-             // Draw Term
-             termLines.forEach(l => {
+             // Draw Term Lines
+             termLines.forEach((l, idx) => {
                  indexPage.drawText(l, { x: drawX, y: targetY, size: 10, font: boldFont });
-                 targetY -= 11;
+                 // Decrement Y only if it's NOT the last line, so we can try to append page nums to last line
+                 if (idx < termLines.length - 1) {
+                     targetY -= 11;
+                 }
              });
 
-             // Draw Page Numbers (Flow Layout)
-             let currentX = drawX;
+             // Calculate position for page numbers (starting after the last term line)
+             const lastLine = termLines[termLines.length - 1];
+             const lastLineW = boldFont.widthOfTextAtSize(lastLine, 10);
+             let currentX = drawX + lastLineW;
+
+             // Add separator (double space)
+             currentX += 8; 
+
+             // Draw Page Numbers
              const pageNums = item.pageNumbers;
              pageNums.forEach((pNum, idx) => {
                  const originalPageStr = String(pNum);
                  
-                 // Calculate Display Page Number (with offset)
+                 // Calculate Display Page Number
                  let displayPageStr = originalPageStr;
                  const pInt = parseInt(originalPageStr);
                  if (!isNaN(pInt)) {
                     displayPageStr = (pInt + pageOffset).toString();
                  }
 
-                 const pWidth = font.widthOfTextAtSize(displayPageStr, 10);
-                 const commaW = font.widthOfTextAtSize(", ", 10);
+                 const isLast = idx === pageNums.length - 1;
+                 const suffix = isLast ? "" : ", ";
+                 const textToDraw = displayPageStr + suffix;
                  
-                 // Wrap page numbers
-                 if (currentX + pWidth > drawX + colWidth) {
+                 const textW = font.widthOfTextAtSize(textToDraw, 10);
+                 
+                 // Wrap if needed
+                 if (currentX + textW > drawX + colWidth) {
                      targetY -= 11;
-                     currentX = drawX;
+                     currentX = drawX + 10; // Indent wrapped page numbers
                  }
                  
+                 // Check if we hit bottom margin mid-item (rare but possible)
+                 if (targetY < margin) {
+                    // Logic to handle mid-item break would be here, skipping for simplicity
+                 }
+
+                 // Draw Number
                  indexPage.drawText(displayPageStr, { x: currentX, y: targetY, size: 10, font });
                  
-                 // ADD LINK (Using original page number to resolve target)
+                 // Link
+                 const numW = font.widthOfTextAtSize(displayPageStr, 10);
                  const targetIdx = resolveTargetPage(originalPageStr);
-                 addLink(indexPage, currentX, targetY - 2, pWidth, 12, targetIdx);
+                 addLink(indexPage, currentX, targetY - 2, numW, 12, targetIdx);
 
-                 currentX += pWidth;
-                 if (idx < pageNums.length - 1) {
-                     indexPage.drawText(", ", { x: currentX, y: targetY, size: 10, font });
-                     currentX += commaW;
+                 // Draw Suffix
+                 if (!isLast) {
+                     indexPage.drawText(", ", { x: currentX + numW, y: targetY, size: 10, font });
                  }
+
+                 currentX += textW;
              });
-             targetY -= 14; 
+             
+             targetY -= 14; // Spacing after item
 
              if (currentCol === 0) y0 = targetY; else y1 = targetY;
          });
