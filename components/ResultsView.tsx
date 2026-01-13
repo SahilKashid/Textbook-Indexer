@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
 import { Download, Book, List, Search, Loader2 } from 'lucide-react';
-import { PDFDocument, rgb, StandardFonts, PDFName, PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFName, PDFPage, PDFArray } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
 interface ResultsViewProps {
@@ -105,16 +105,25 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
          if (targetPageIdx < 0 || targetPageIdx >= newPdf.getPageCount()) return;
          
          const targetPage = newPdf.getPages()[targetPageIdx];
-         const link = newPdf.context.register(
-           newPdf.context.obj({
+         
+         const linkDict = newPdf.context.obj({
              Type: 'Annot',
              Subtype: 'Link',
              Rect: [x, y, x + w, y + h],
-             Border: [0, 0, 0],
+             Border: [0, 0, 0], // No border visible, we use text color to indicate link
              Dest: [targetPage.ref, 'XYZ', null, null, null], 
-           })
-         );
-         page.node.addAnnot(link);
+         });
+         
+         const linkRef = newPdf.context.register(linkDict);
+         
+         const pageNode = page.node;
+         let annots = pageNode.lookup(PDFName.of('Annots'));
+         
+         if (annots instanceof PDFArray) {
+             annots.push(linkRef);
+         } else {
+             pageNode.set(PDFName.of('Annots'), newPdf.context.obj([linkRef]));
+         }
       };
 
       // --- STEP 1: CALCULATE TOC SIZE & CREATE PLACEHOLDERS ---
@@ -137,6 +146,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
          tocPageCount = pages;
       }
 
+      // If NOT using printed page numbers, we shift the displayed page numbers by the ToC count
+      // so the document is sequential (ToC pages + Content pages)
+      const pageOffset = usePrintedPageNumbers ? 0 : tocPageCount;
+
       // Create ToC Placeholders
       for (let i = 0; i < tocPageCount; i++) {
         newPdf.addPage([pageWidth, pageHeight]);
@@ -150,13 +163,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       const contentEndIndex = newPdf.getPageCount() - 1;
 
       // Helper to map "Page 5" string to actual PDF index
-      const resolveTargetPage = (pageNumStr: string | number): number => {
-         const p = parseInt(String(pageNumStr).replace(/[^0-9]/g, ''));
-         if (isNaN(p)) return contentStartIndex; // Default to start of content
+      const resolveTargetPage = (originalPageNumStr: string | number): number => {
+         const p = parseInt(String(originalPageNumStr).replace(/[^0-9]/g, ''));
+         if (isNaN(p)) return contentStartIndex; 
          
-         // If using printed numbers, we assume '1' maps to start of content. 
-         // Advanced logic would require a map, but 1-based offset is best guess.
-         // Index 0 of content = Page 1
+         // 1-based index from extracted content maps to 0-based index in the appended block
          const target = contentStartIndex + (p - 1);
          if (target > contentEndIndex) return contentEndIndex;
          if (target < contentStartIndex) return contentStartIndex;
@@ -194,7 +205,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
          // Section Header (e.g., "A")
          let targetY = currentCol === 0 ? y0 : y1;
          if (targetY < margin + 40) {
-            // New Page / Column switch
             if (currentCol === 0) {
                 currentCol = 1; targetY = cursorY; y1 = cursorY;
             } else {
@@ -215,7 +225,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
              const term = sanitize(item.term);
              const termLines = wrapText(term, colWidth, boldFont, 10);
              
-             // Measure height needed (term lines + context lines + 1 line for page nums)
              const contextSafe = item.context ? sanitize(item.context) : null;
              const contextLines = contextSafe ? wrapText(contextSafe, colWidth, italicFont, 9) : [];
              const totalH = (termLines.length * 11) + (contextLines.length * 10) + 12 + 6;
@@ -249,21 +258,29 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
              let currentX = drawX;
              const pageNums = item.pageNumbers;
              pageNums.forEach((pNum, idx) => {
-                 const pStr = String(pNum);
-                 const pWidth = font.widthOfTextAtSize(pStr, 10);
+                 const originalPageStr = String(pNum);
+                 
+                 // Calculate Display Page Number (with offset)
+                 let displayPageStr = originalPageStr;
+                 const pInt = parseInt(originalPageStr);
+                 if (!isNaN(pInt)) {
+                    displayPageStr = (pInt + pageOffset).toString();
+                 }
+
+                 const pWidth = font.widthOfTextAtSize(displayPageStr, 10);
                  const commaW = font.widthOfTextAtSize(", ", 10);
                  
-                 // Wrap page numbers if needed
+                 // Wrap page numbers
                  if (currentX + pWidth > drawX + colWidth) {
                      targetY -= 11;
                      currentX = drawX;
                  }
                  
-                 indexPage.drawText(pStr, { x: currentX, y: targetY, size: 10, font, color: rgb(0, 0, 0.7) });
+                 indexPage.drawText(displayPageStr, { x: currentX, y: targetY, size: 10, font, color: rgb(0, 0, 0.7) });
                  
-                 // ADD LINK
-                 const targetIdx = resolveTargetPage(pStr);
-                 addLink(indexPage, currentX, targetY, pWidth, 10, targetIdx);
+                 // ADD LINK (Using original page number to resolve target)
+                 const targetIdx = resolveTargetPage(originalPageStr);
+                 addLink(indexPage, currentX, targetY - 2, pWidth, 12, targetIdx);
 
                  currentX += pWidth;
                  if (idx < pageNums.length - 1) {
@@ -271,13 +288,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
                      currentX += commaW;
                  }
              });
-             targetY -= 14; // Spacing after item
+             targetY -= 14; 
 
-             // Update column cursors
              if (currentCol === 0) y0 = targetY; else y1 = targetY;
          });
          
-         // Spacing after letter group
          if (currentCol === 0) y0 -= 10; else y1 -= 10;
       });
 
@@ -289,7 +304,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       let currentTocPage = tocPages[0];
       cursorY = pageHeight - margin;
 
-      // Header
       currentTocPage.drawText('Table of Contents', { 
           x: pageWidth / 2 - boldFont.widthOfTextAtSize('Table of Contents', headerSize) / 2, 
           y: cursorY, 
@@ -303,12 +317,19 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
          const entrySize = entry.level === 1 ? 11 : 10;
          const indent = (entry.level - 1) * 15;
          const numWidth = 30;
-         const titleWidth = contentWidth - indent - numWidth - 10; // 10 gap
+         const titleWidth = contentWidth - indent - numWidth - 10; 
 
          const lines = wrapText(entry.title, titleWidth, entryFont, entrySize);
          
-         const pStr = String(entry.pageNumber);
-         const targetIdx = resolveTargetPage(pStr);
+         const originalPageStr = String(entry.pageNumber);
+         // Calculate Display Page Number
+         let displayPageStr = originalPageStr;
+         const pInt = parseInt(originalPageStr);
+         if (!isNaN(pInt)) {
+            displayPageStr = (pInt + pageOffset).toString();
+         }
+
+         const targetIdx = resolveTargetPage(originalPageStr);
 
          lines.forEach((line, idx) => {
            if (cursorY < margin) {
@@ -322,13 +343,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
            // Draw Title
            currentTocPage.drawText(line, { x: margin + indent, y: cursorY, size: entrySize, font: entryFont });
            
-           // If last line of title, draw dots and page number
            if (idx === lines.length - 1) {
              const titleLineWidth = entryFont.widthOfTextAtSize(line, entrySize);
              const startDotX = margin + indent + titleLineWidth + 5;
              const endDotX = pageWidth - margin - 35; 
              
-             // Draw Dotted Leader
              if (endDotX > startDotX) {
                 const dot = ".";
                 const dotW = font.widthOfTextAtSize(dot, 10);
@@ -338,11 +357,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
                 currentTocPage.drawText(dots, { x: startDotX, y: cursorY, size: 8, font, color: rgb(0.5,0.5,0.5) });
              }
 
-             // Draw Page Number
-             const pWidth = font.widthOfTextAtSize(pStr, entrySize);
-             currentTocPage.drawText(pStr, { x: pageWidth - margin - pWidth, y: cursorY, size: entrySize, font: entryFont });
+             // Draw Displayed Page Number
+             const pWidth = font.widthOfTextAtSize(displayPageStr, entrySize);
+             currentTocPage.drawText(displayPageStr, { x: pageWidth - margin - pWidth, y: cursorY, size: entrySize, font: entryFont });
 
-             // ADD LINK (Covering the whole line)
+             // ADD LINK covering the whole entry line
              addLink(currentTocPage, margin, cursorY - 2, pageWidth - (margin * 2), entrySize + 4, targetIdx);
            }
 
