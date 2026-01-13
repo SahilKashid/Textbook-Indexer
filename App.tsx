@@ -7,7 +7,7 @@ import { processFile } from './services/fileService';
 import { createContentChunks } from './utils/chunking';
 import { analyzeChunk, mergeAnalysisResults } from './services/geminiService';
 import { AppView, ProcessingStats, AnalysisResult } from './types';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Hash, FileText } from 'lucide-react';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.UPLOAD);
@@ -17,6 +17,8 @@ const App: React.FC = () => {
     status: 'idle',
   });
   const [results, setResults] = useState<AnalysisResult>({ toc: [], index: [] });
+  const [usePrintedPageNumbers, setUsePrintedPageNumbers] = useState(false);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
 
   const handleProcess = useCallback(async (file: File) => {
     try {
@@ -25,6 +27,7 @@ const App: React.FC = () => {
         return;
       }
       
+      setCurrentFile(file);
       setView(AppView.PROCESSING);
       setStats(prev => ({ 
         ...prev, 
@@ -61,7 +64,8 @@ const App: React.FC = () => {
             statusMessage: `Analyzing segment ${prev.processedUnits + 1} of ${prev.totalUnits}...` 
         }));
 
-        const result = await analyzeChunk(chunk, process.env.API_KEY);
+        // Pass the numbering mode to the service
+        const result = await analyzeChunk(chunk, process.env.API_KEY, usePrintedPageNumbers);
         partialResults.push(result);
 
         setStats(prev => ({ 
@@ -86,11 +90,12 @@ const App: React.FC = () => {
           errorMessage: error.message || 'Unknown error occurred' 
       }));
     }
-  }, []);
+  }, [usePrintedPageNumbers]);
 
   const reset = () => {
     setView(AppView.UPLOAD);
     setResults({ toc: [], index: [] });
+    setCurrentFile(null);
     setStats({
       totalUnits: 0,
       processedUnits: 0,
@@ -141,11 +146,38 @@ const App: React.FC = () => {
           )}
 
           {view === AppView.UPLOAD && (
-            <div className="animate-fade-in-up delay-100">
+            <div className="animate-fade-in-up delay-100 flex flex-col gap-8">
               <FileUploader 
                 onFileSelect={handleProcess} 
                 isLoading={stats.status !== 'idle' && stats.status !== 'error'} 
               />
+              
+              {/* Page Numbering Toggle */}
+              <div className="flex justify-center">
+                 <label className="flex items-center gap-4 cursor-pointer group bg-white/5 hover:bg-white/10 p-4 rounded-xl border border-white/5 transition-all duration-300">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-black/40 border border-white/10 text-gray-400 group-hover:text-white transition-colors">
+                        {usePrintedPageNumbers ? <Hash size={18} /> : <FileText size={18} />}
+                    </div>
+                    <div className="flex flex-col mr-4">
+                      <span className="text-sm font-medium text-gray-200">
+                        {usePrintedPageNumbers ? 'Using Printed Page Numbers' : 'Using Document Page Index'}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {usePrintedPageNumbers ? 'Detecting numbers from page images' : 'Counting sequential PDF pages'}
+                      </span>
+                    </div>
+                    
+                    <div className="relative">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={usePrintedPageNumbers}
+                        onChange={(e) => setUsePrintedPageNumbers(e.target.checked)} 
+                      />
+                      <div className="w-11 h-6 bg-zinc-800 border border-white/10 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-400 after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-white peer-checked:after:bg-black peer-checked:after:border-black"></div>
+                    </div>
+                 </label>
+              </div>
             </div>
           )}
 
@@ -156,7 +188,11 @@ const App: React.FC = () => {
           )}
 
           {view === AppView.RESULTS && (
-            <ResultsView data={results} />
+            <ResultsView 
+              data={results} 
+              originalFile={currentFile} 
+              usePrintedPageNumbers={usePrintedPageNumbers}
+            />
           )}
 
         </div>

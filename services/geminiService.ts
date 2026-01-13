@@ -6,7 +6,8 @@ const MODEL_NAME = 'gemini-3-flash-preview';
 
 export const analyzeChunk = async (
   chunk: ProcessingChunk,
-  apiKey: string
+  apiKey: string,
+  usePrintedPageNumbers: boolean = false
 ): Promise<AnalysisResult> => {
   if (!apiKey) throw new Error('API Key is missing');
 
@@ -16,6 +17,21 @@ export const analyzeChunk = async (
   let parts: any[] = [];
 
   if (chunk.type === 'image') {
+    const numberingInstruction = usePrintedPageNumbers 
+      ? `
+        PAGE NUMBERING MODE: VISUAL (PRINTED)
+        - Look for the actual page number printed on the page image (header/footer).
+        - Use this VISIBLE printed number for all ToC and Index references.
+        - If a page has no visible number, infer it from the sequence of surrounding printed numbers.
+        - The [PAGE X] marker provided in the prompt is the file index; use it only as a fallback if visual extraction is impossible.
+      `
+      : `
+        PAGE NUMBERING MODE: SEQUENTIAL (FILE INDEX)
+        - STRICTLY use the [PAGE X] marker provided before each image as the page number.
+        - IGNORE any page numbers visible inside the image content.
+        - X represents the absolute PDF/File page index.
+      `;
+
     promptText = `
       You are an expert textbook editor. Analyze the provided textbook pages (images) and extract:
       1. A Table of Contents (ToC) structure (Chapters, Sections).
@@ -28,8 +44,7 @@ export const analyzeChunk = async (
 
       CONTEXT:
       - These pages are from a larger document.
-      - Explicitly map content to the PAGE NUMBER shown in the image or implied by the sequence.
-      - Start numbering from ${chunk.startPage}.
+      ${numberingInstruction}
       
       CRITICAL:
       - Capture EVERY important term for the index.
