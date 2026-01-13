@@ -34,10 +34,11 @@ export const analyzeChunk = async (
 
     promptText = `
       You are an expert textbook editor. Analyze the provided textbook pages (images) and extract:
-      1. A Table of Contents (ToC) structure (Chapters, Sections).
-         - Ignore running headers or footers (e.g., book title repeatedly at top of page).
-         - Only include actual section headings found in the text body.
-         - Maintain hierarchy (level 1 for Chapters, 2 for Sections, etc.).
+      1. A CONCISE Table of Contents (ToC).
+         - STRICTLY LIMIT to high-level structures: PART TITLES and CHAPTER TITLES only.
+         - DO NOT include sub-sections, sub-headings, or detailed breakdowns within chapters.
+         - If a page contains a detailed outline, IGNORE the details and only capture the main Chapter Title.
+         - Ignore running headers or footers.
       2. An Alphabetical Index of important terms, concepts, and proper nouns.
          - Exclude trivial mentions.
 
@@ -46,6 +47,7 @@ export const analyzeChunk = async (
       ${numberingInstruction}
       
       CRITICAL:
+      - KEEP TOC MINIMAL (Parts/Chapters only).
       - Capture EVERY important term for the index.
       
       Return JSON.
@@ -68,7 +70,9 @@ export const analyzeChunk = async (
   } else {
     // Text mode
     promptText = `
-      You are an expert textbook editor. Analyze the provided text and extract ToC and Index.
+      You are an expert textbook editor. Analyze the provided text and extract:
+      1. A CONCISE ToC (Parts/Chapters only, NO subsections).
+      2. An Index.
       The text is a segment of a larger file.
       Return JSON.
     `;
