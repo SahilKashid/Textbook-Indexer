@@ -110,7 +110,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
              Type: 'Annot',
              Subtype: 'Link',
              Rect: [x, y, x + w, y + h],
-             Border: [0, 0, 0], // No border visible, we use text color to indicate link
+             Border: [0, 0, 0], // No border visible
              Dest: [targetPage.ref, 'XYZ', null, null, null], 
          });
          
@@ -276,7 +276,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
                      currentX = drawX;
                  }
                  
-                 indexPage.drawText(displayPageStr, { x: currentX, y: targetY, size: 10, font, color: rgb(0, 0, 0.7) });
+                 indexPage.drawText(displayPageStr, { x: currentX, y: targetY, size: 10, font });
                  
                  // ADD LINK (Using original page number to resolve target)
                  const targetIdx = resolveTargetPage(originalPageStr);
