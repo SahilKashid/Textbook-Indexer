@@ -473,7 +473,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
   return (
     <div className="w-full h-full bg-[#0A0A0A] border border-white/5 rounded-2xl overflow-hidden flex flex-col shadow-2xl shadow-black/80 ring-1 ring-white/[0.02]">
       {/* Header Area */}
-      <div className="bg-black/40 border-b border-white/5 px-4 h-16 flex items-center justify-between gap-4 backdrop-blur-md">
+      <div className="relative z-20 bg-black/40 border-b border-white/5 px-4 h-16 flex items-center justify-between gap-4 backdrop-blur-md">
         
         {/* Modern Tabs */}
         <div className="flex bg-white/[0.03] p-1 rounded-lg border border-white/[0.02]">
