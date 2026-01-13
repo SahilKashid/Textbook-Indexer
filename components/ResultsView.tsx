@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
 import { Download, Book, List, Search, Loader2 } from 'lucide-react';
 import { PDFDocument, rgb, StandardFonts, PDFName, PDFPage, PDFArray } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
 
 interface ResultsViewProps {
   data: AnalysisResult;
@@ -25,40 +24,16 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
     try {
       setIsGeneratingPdf(true);
       const originalPdfBytes = await originalFile.arrayBuffer();
+      // Load original without fontkit since we are only using StandardFonts for additions
       const originalPdf = await PDFDocument.load(originalPdfBytes);
       
-      originalPdf.registerFontkit(fontkit);
-      
       const newPdf = await PDFDocument.create();
-      newPdf.registerFontkit(fontkit);
 
       // --- FONT LOADING ---
-      let font: any, boldFont: any, italicFont: any;
-      let usingFallbackFont = false;
-
-      try {
-        const loadFont = async (url: string) => {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`Failed to fetch font from ${url}`);
-            return await res.arrayBuffer();
-        };
-
-        const [fontBytes, boldFontBytes, italicFontBytes] = await Promise.all([
-          loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Regular.ttf'),
-          loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Bold.ttf'),
-          loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Italic.ttf')
-        ]);
-
-        font = await newPdf.embedFont(fontBytes);
-        boldFont = await newPdf.embedFont(boldFontBytes);
-        italicFont = await newPdf.embedFont(italicFontBytes);
-      } catch (fontError) {
-        console.warn("Falling back to StandardFonts.", fontError);
-        font = await newPdf.embedFont(StandardFonts.Helvetica);
-        boldFont = await newPdf.embedFont(StandardFonts.HelveticaBold);
-        italicFont = await newPdf.embedFont(StandardFonts.HelveticaOblique);
-        usingFallbackFont = true;
-      }
+      // User requested to remove external font fetching and use fallback (StandardFonts)
+      const font = await newPdf.embedFont(StandardFonts.Helvetica);
+      const boldFont = await newPdf.embedFont(StandardFonts.HelveticaBold);
+      const italicFont = await newPdf.embedFont(StandardFonts.HelveticaOblique);
 
       // --- CONSTANTS ---
       const fontSize = 10;
@@ -72,11 +47,12 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       // --- UTILS ---
       
       const sanitize = (text: string) => {
-        let safe = text.replace(/[\n\r]+/g, ' ');
-        if (usingFallbackFont) {
-           safe = safe.replace(/–|—/g, '-').replace(/“|”/g, '"').replace(/’/g, "'").replace(/[^\x20-\x7E]/g, '');
-        }
-        return safe;
+        // Since we are using StandardFonts (WinAnsi), we must replace unsupported characters
+        return text.replace(/[\n\r]+/g, ' ')
+           .replace(/–|—/g, '-')
+           .replace(/“|”/g, '"')
+           .replace(/’/g, "'")
+           .replace(/[^\x20-\x7E]/g, '');
       };
 
       const wrapText = (text: string, maxWidth: number, fontToUse: any, size: number): string[] => {
@@ -136,7 +112,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
          data.toc.forEach(entry => {
              const indent = (entry.level - 1) * 15;
              const availableWidth = contentWidth - indent - 40; 
-             const lines = wrapText(entry.title, availableWidth, entry.level === 1 ? boldFont : font, fontSize);
+             // Level 1 is bold
+             const entryFont = entry.level === 1 ? boldFont : font;
+             const entrySize = entry.level === 1 ? 12 : 10;
+             
+             const lines = wrapText(entry.title, availableWidth, entryFont, entrySize);
              lines.forEach(() => {
                 if (cursorY < margin) { pages++; cursorY = pageHeight - margin; }
                 cursorY -= lineHeight;
@@ -179,7 +159,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       let indexPage = newPdf.addPage([pageWidth, pageHeight]);
       let cursorY = pageHeight - margin;
       
-      // Header
+      // Header: "Index" (was "Alphabetical Index")
       indexPage.drawText('Index', { x: margin, y: cursorY, size: headerSize, font: boldFont });
       indexPage.drawLine({ start: { x: margin, y: cursorY - 10 }, end: { x: pageWidth - margin, y: cursorY - 10 }, thickness: 1, color: rgb(0,0,0) });
       cursorY -= 50;
@@ -313,6 +293,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       cursorY -= 50;
 
       data.toc.forEach(entry => {
+         // Level 1: Bold, Size 12. Level 2+: Regular, Size 10.
          const entryFont = entry.level === 1 ? boldFont : font;
          const entrySize = entry.level === 1 ? 12 : 10;
          const indent = (entry.level - 1) * 15;
