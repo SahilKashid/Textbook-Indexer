@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
 import { Download, Book, List, Search, Loader2 } from 'lucide-react';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, rgb } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 
 interface ResultsViewProps {
   data: AnalysisResult;
@@ -25,11 +26,23 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       setIsGeneratingPdf(true);
       const originalPdfBytes = await originalFile.arrayBuffer();
       const originalPdf = await PDFDocument.load(originalPdfBytes);
+      
+      // Register fontkit to support custom fonts
+      originalPdf.registerFontkit(fontkit);
+      
       const newPdf = await PDFDocument.create();
+      newPdf.registerFontkit(fontkit);
 
-      // Embed Font
-      const font = await newPdf.embedFont(StandardFonts.Helvetica);
-      const boldFont = await newPdf.embedFont(StandardFonts.HelveticaBold);
+      // Fetch Unicode-compatible fonts (Roboto)
+      // We use these instead of StandardFonts to avoid WinAnsi encoding errors with special characters
+      const [fontBytes, boldFontBytes] = await Promise.all([
+        fetch('https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.ttf').then(res => res.arrayBuffer()),
+        fetch('https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4.ttf').then(res => res.arrayBuffer())
+      ]);
+
+      const font = await newPdf.embedFont(fontBytes);
+      const boldFont = await newPdf.embedFont(boldFontBytes);
+
       const fontSize = 11;
       const lineHeight = 15;
       const pageWidth = 595.28; // A4 width
@@ -40,7 +53,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       // --- HELPERS ---
       
       const wrapText = (text: string, maxWidth: number, font: any, size: number): string[] => {
-        const words = text.split(' ');
+        // Sanitize newlines to spaces to prevent font measuring errors
+        const safeText = text.replace(/[\n\r]+/g, ' ');
+        const words = safeText.split(' ');
         const lines: string[] = [];
         let currentLine = words[0];
 
@@ -60,13 +75,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
       // --- CALCULATE TOC SIZE FOR OFFSET ---
       
-      // We simulate rendering the ToC to count how many pages it takes.
-      // This is necessary because inserting ToC at the start shifts the original content.
-      // If usePrintedPageNumbers is FALSE (Sequential), we must offset the page numbers in the new PDF.
-      // If TRUE, we keep the visual numbers as is.
-      
       let tocPageCount = 0;
-      let y = 0; // Simulated Y cursor
       const simulateToc = () => {
          let pages = 1;
          let cursorY = pageHeight - margin - 40; // Start after header
@@ -128,20 +137,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
            currentPage.drawText(line, { x: margin + indent, y: cursorY, size: fontSize, font: entryFont });
            
-           // Draw dots and page number only on the last line of the title
+           // Page Num
            if (idx === lines.length - 1) {
-             const lineWidth = entryFont.widthOfTextAtSize(line, fontSize);
-             // Dots
-             if (entry.level === 1) {
-                // No dots for chapters usually, or keep it clean
-             } else {
-                 // Simple dots
-                 // const startDot = margin + indent + lineWidth + 5;
-                 // const endDot = pageWidth - margin - numWidth;
-                 // if (endDot > startDot) currentPage.drawText('. . . . . . . .', { x: startDot, y: cursorY, size: 10, font });
-             }
-             
-             // Page Num
              const pWidth = font.widthOfTextAtSize(displayPage, fontSize);
              currentPage.drawText(displayPage, { x: pageWidth - margin - pWidth, y: cursorY, size: fontSize, font });
            }
@@ -169,15 +166,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       const colGap = 20;
       const colWidth = (contentWidth - colGap) / 2;
       let currentCol = 0; // 0 or 1
-      let colY = cursorY; // Track Y for columns independently if needed, but usually we flow down
-
-      // We flow down column 0, then column 1, then new page.
-      // Easier strategy: Just fill strictly line by line but calculate X based on column? 
-      // No, that makes reading hard. We need to fill Col 1 then Col 2.
-      // But we have unknown height.
-      // Strategy: Render one item at a time. If it fits in Col 0, place it. If not, go to Col 1. If Col 1 full, new page -> Col 0.
-
-      // Reset Y
       let y0 = cursorY;
       let y1 = cursorY;
       
@@ -196,7 +184,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
          const termLines = wrapText(fullText, colWidth, boldFont, 10);
          const contextLines = contextText ? wrapText(contextText, colWidth, font, 9) : [];
          
-         const totalHeight = (termLines.length * 12) + (contextLines.length * 11) + 6; // 12/11 leading + padding
+         const totalHeight = (termLines.length * 12) + (contextLines.length * 11) + 6;
 
          // Check availability in current column
          let targetY = (currentCol === 0) ? y0 : y1;
@@ -206,7 +194,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
              if (currentCol === 0) {
                  currentCol = 1;
                  targetY = cursorY; // Reset to top
-                 // Update y1
                  y1 = cursorY;
              } else {
                  // Page full
@@ -257,7 +244,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
     } catch (e) {
         console.error("Error generating PDF", e);
-        alert("Failed to generate PDF. See console for details.");
+        // Fallback or alert logic could be added here
+        alert("Failed to generate PDF. The document might contain unsupported characters or the font failed to load.");
     } finally {
         setIsGeneratingPdf(false);
     }
