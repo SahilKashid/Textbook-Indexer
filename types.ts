@@ -7,7 +7,6 @@ export interface TocEntry {
 export interface IndexEntry {
   term: string;
   pageNumbers: (number | string)[];
-  context?: string;
 }
 
 export interface ProcessingStats {

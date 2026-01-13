@@ -207,9 +207,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
              const term = sanitize(item.term);
              const termLines = wrapText(term, colWidth, boldFont, 10);
              
-             const contextSafe = item.context ? sanitize(item.context) : null;
-             const contextLines = contextSafe ? wrapText(contextSafe, colWidth, italicFont, 9) : [];
-             const totalH = (termLines.length * 11) + (contextLines.length * 10) + 12 + 6;
+             // Removed context logic
+             const totalH = (termLines.length * 11) + 12;
 
              // Check overflow
              if (targetY - totalH < margin) {
@@ -228,12 +227,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
              termLines.forEach(l => {
                  indexPage.drawText(l, { x: drawX, y: targetY, size: 10, font: boldFont });
                  targetY -= 11;
-             });
-
-             // Draw Context
-             contextLines.forEach(l => {
-                 indexPage.drawText(l, { x: drawX, y: targetY, size: 9, font: italicFont, color: rgb(0.3, 0.3, 0.3) });
-                 targetY -= 10;
              });
 
              // Draw Page Numbers (Flow Layout)
@@ -424,7 +417,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
             ${data.index.map(i => `
               <div class="index-entry">
                 <strong>${i.term}</strong>: ${i.pageNumbers.join(', ')}
-                ${i.context ? `<br><em style="color:#666;font-size:0.9em">${i.context}</em>` : ''}
               </div>
             `).join('')}
           </div>
@@ -455,8 +447,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       mimeType = 'text/markdown';
       filename = 'textbook-analysis.md';
     } else if (format === 'csv') {
-      content = 'Term,Page Numbers,Context\n';
-      data.index.forEach(i => content += `"${i.term}","${i.pageNumbers.join(';')}", "${i.context || ''}"\n`);
+      content = 'Term,Page Numbers\n';
+      data.index.forEach(i => content += `"${i.term}","${i.pageNumbers.join(';')}"\n`);
       mimeType = 'text/csv';
       filename = 'index-export.csv';
     }
@@ -612,11 +604,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
                              )}
                           </div>
                         </div>
-                        {item.context && (
-                            <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-2 group-hover:text-gray-400 transition-colors">
-                                {item.context}
-                            </p>
-                        )}
                       </div>
                     ))}
                   </div>

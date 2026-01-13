@@ -39,7 +39,6 @@ export const analyzeChunk = async (
          - Only include actual section headings found in the text body.
          - Maintain hierarchy (level 1 for Chapters, 2 for Sections, etc.).
       2. An Alphabetical Index of important terms, concepts, and proper nouns.
-         - Focus on definitions, key concepts, and significant mentions.
          - Exclude trivial mentions.
 
       CONTEXT:
@@ -48,7 +47,6 @@ export const analyzeChunk = async (
       
       CRITICAL:
       - Capture EVERY important term for the index.
-      - Do not summarize; enumerate details.
       
       Return JSON.
     `;
@@ -108,8 +106,7 @@ export const analyzeChunk = async (
                 type: Type.OBJECT,
                 properties: {
                   term: { type: Type.STRING },
-                  pageNumber: { type: Type.STRING },
-                  context: { type: Type.STRING }
+                  pageNumber: { type: Type.STRING }
                 },
                 required: ["term", "pageNumber"]
               }
@@ -135,8 +132,7 @@ export const analyzeChunk = async (
     const rawIndex = parsed.index || [];
     const formattedIndex: IndexEntry[] = rawIndex.map((item: any) => ({
       term: item.term,
-      pageNumbers: [item.pageNumber],
-      context: item.context
+      pageNumbers: [item.pageNumber]
     }));
 
     return {
@@ -190,8 +186,7 @@ export const mergeAnalysisResults = (results: AnalysisResult[]): AnalysisResult 
   // We need to handle case sensitivity (DNA vs dna) and merge page numbers
   const indexMap = new Map<string, {
     termVariants: Map<string, number>, // Track frequency of different casings
-    pageNumbers: Set<string>,
-    contexts: Set<string>
+    pageNumbers: Set<string>
   }>();
 
   results.flatMap(r => r.index).forEach(entry => {
@@ -204,8 +199,7 @@ export const mergeAnalysisResults = (results: AnalysisResult[]): AnalysisResult 
     if (!indexMap.has(key)) {
       indexMap.set(key, {
         termVariants: new Map(),
-        pageNumbers: new Set(),
-        contexts: new Set()
+        pageNumbers: new Set()
       });
     }
 
@@ -216,11 +210,6 @@ export const mergeAnalysisResults = (results: AnalysisResult[]): AnalysisResult 
 
     // Add page numbers
     entry.pageNumbers.forEach(p => record.pageNumbers.add(String(p)));
-
-    // Add context if present
-    if (entry.context) {
-      record.contexts.add(entry.context);
-    }
   });
 
   // Convert map back to array
@@ -249,14 +238,9 @@ export const mergeAnalysisResults = (results: AnalysisResult[]): AnalysisResult 
        return a.localeCompare(b);
     });
 
-    // 3. Pick best context (longest/most descriptive one)
-    const bestContext = Array.from(record.contexts)
-      .sort((a, b) => b.length - a.length)[0];
-
     return {
       term: bestTerm,
-      pageNumbers: sortedPages,
-      context: bestContext
+      pageNumbers: sortedPages
     };
   });
 
