@@ -205,7 +205,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
          // Draw Items
          groupedIndex[letter].forEach(item => {
              const term = sanitize(item.term);
-             const termLines = wrapText(term, colWidth, boldFont, 10);
+             // Use Regular font for calculating wrap
+             const termLines = wrapText(term, colWidth, font, 10);
              
              // Estimate height (term lines + 1 line for page nums buffer)
              const totalH = (termLines.length * 11) + 15;
@@ -225,7 +226,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
              
              // Draw Term Lines
              termLines.forEach((l, idx) => {
-                 indexPage.drawText(l, { x: drawX, y: targetY, size: 10, font: boldFont });
+                 // Use Regular font for drawing
+                 indexPage.drawText(l, { x: drawX, y: targetY, size: 10, font: font });
                  // Decrement Y only if it's NOT the last line, so we can try to append page nums to last line
                  if (idx < termLines.length - 1) {
                      targetY -= 11;
@@ -234,7 +236,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
              // Calculate position for page numbers (starting after the last term line)
              const lastLine = termLines[termLines.length - 1];
-             const lastLineW = boldFont.widthOfTextAtSize(lastLine, 10);
+             // Use Regular font for width calc
+             const lastLineW = font.widthOfTextAtSize(lastLine, 10);
              let currentX = drawX + lastLineW;
 
              // Add separator (double space)
