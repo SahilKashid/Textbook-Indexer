@@ -21,8 +21,11 @@ const App: React.FC = () => {
 
   const handleProcess = useCallback(async (file: File) => {
     try {
-      if (!process.env.API_KEY) {
-        alert('Missing API KEY. Please ensuring the environment variable is set.');
+      // Safely access process.env
+      const apiKey = typeof process !== 'undefined' ? process.env?.API_KEY : undefined;
+
+      if (!apiKey) {
+        alert('Missing API KEY. Please ensure the environment variable is set.');
         return;
       }
       
@@ -64,7 +67,7 @@ const App: React.FC = () => {
         }));
 
         // Pass the numbering mode to the service
-        const result = await analyzeChunk(chunk, process.env.API_KEY, usePrintedPageNumbers);
+        const result = await analyzeChunk(chunk, apiKey, usePrintedPageNumbers);
         partialResults.push(result);
 
         setStats(prev => ({ 

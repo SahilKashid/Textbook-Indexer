@@ -8,6 +8,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      // Polyfill process for browser environments if missing to prevent ReferenceErrors
+      if (typeof process === 'undefined') {
+        window.process = { env: {} };
+      }
     </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
@@ -40,7 +44,7 @@
     "react-dom": "https://esm.sh/react-dom@18.3.1",
     "react-dom/": "https://esm.sh/react-dom@18.3.1/",
     "lucide-react": "https://esm.sh/lucide-react@0.344.0",
-    "@google/genai": "https://esm.sh/@google/genai@0.1.1",
+    "@google/genai": "https://esm.sh/@google/genai",
     "pdf-lib": "https://esm.sh/pdf-lib@1.17.1",
     "@pdf-lib/fontkit": "https://esm.sh/@pdf-lib/fontkit@1.1.1"
   }
