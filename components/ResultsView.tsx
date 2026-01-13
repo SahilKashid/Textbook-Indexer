@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
 import { Download, Book, List, Search, Loader2 } from 'lucide-react';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFName, PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
 interface ResultsViewProps {
@@ -27,249 +27,330 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       const originalPdfBytes = await originalFile.arrayBuffer();
       const originalPdf = await PDFDocument.load(originalPdfBytes);
       
-      // Register fontkit instance to support custom fonts (required for Unicode)
       originalPdf.registerFontkit(fontkit);
       
       const newPdf = await PDFDocument.create();
       newPdf.registerFontkit(fontkit);
 
-      // --- FONT LOADING LOGIC ---
-      let font: any;
-      let boldFont: any;
+      // --- FONT LOADING ---
+      let font: any, boldFont: any, italicFont: any;
       let usingFallbackFont = false;
 
       try {
-        // Attempt to load Unicode-compatible fonts from a stable CDN (jsDelivr/GitHub)
-        // Correct path for Roboto in google/fonts repo is 'ofl/roboto'
         const loadFont = async (url: string) => {
             const res = await fetch(url);
-            if (!res.ok) throw new Error(`Failed to fetch font from ${url}: ${res.statusText}`);
+            if (!res.ok) throw new Error(`Failed to fetch font from ${url}`);
             return await res.arrayBuffer();
         };
 
-        const [fontBytes, boldFontBytes] = await Promise.all([
+        const [fontBytes, boldFontBytes, italicFontBytes] = await Promise.all([
           loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Regular.ttf'),
-          loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Bold.ttf')
+          loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Bold.ttf'),
+          loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Italic.ttf')
         ]);
 
         font = await newPdf.embedFont(fontBytes);
         boldFont = await newPdf.embedFont(boldFontBytes);
+        italicFont = await newPdf.embedFont(italicFontBytes);
       } catch (fontError) {
-        console.warn("Failed to load custom fonts, falling back to StandardFonts.", fontError);
-        // Fallback to standard fonts if network fails
+        console.warn("Falling back to StandardFonts.", fontError);
         font = await newPdf.embedFont(StandardFonts.Helvetica);
         boldFont = await newPdf.embedFont(StandardFonts.HelveticaBold);
+        italicFont = await newPdf.embedFont(StandardFonts.HelveticaOblique);
         usingFallbackFont = true;
       }
 
-      const fontSize = 11;
-      const lineHeight = 15;
-      const pageWidth = 595.28; // A4 width
-      const pageHeight = 841.89; // A4 height
+      // --- CONSTANTS ---
+      const fontSize = 10;
+      const headerSize = 24;
+      const lineHeight = 16;
+      const pageWidth = 595.28; 
+      const pageHeight = 841.89; 
       const margin = 50;
       const contentWidth = pageWidth - (margin * 2);
 
-      // --- HELPERS ---
+      // --- UTILS ---
       
-      const wrapText = (text: string, maxWidth: number, font: any, size: number): string[] => {
-        // 1. Sanitize newlines to spaces
-        let safeText = text.replace(/[\n\r]+/g, ' ');
-
-        // 2. If using fallback font (StandardFonts), strip/replace unsupported chars to prevent WinAnsi crash
+      const sanitize = (text: string) => {
+        let safe = text.replace(/[\n\r]+/g, ' ');
         if (usingFallbackFont) {
-           safeText = safeText
-             .replace(/–/g, '-')
-             .replace(/—/g, '-')
-             .replace(/“/g, '"')
-             .replace(/”/g, '"')
-             .replace(/’/g, "'")
-             .replace(/•/g, "*")
-             .replace(/…/g, "...")
-             .replace(/[^\x20-\x7E]/g, ''); // Aggressive strip to ASCII printable only for safety
+           safe = safe.replace(/–|—/g, '-').replace(/“|”/g, '"').replace(/’/g, "'").replace(/[^\x20-\x7E]/g, '');
         }
+        return safe;
+      };
 
-        const words = safeText.split(' ');
+      const wrapText = (text: string, maxWidth: number, fontToUse: any, size: number): string[] => {
+        const words = sanitize(text).split(' ');
         const lines: string[] = [];
         let currentLine = words[0];
 
         for (let i = 1; i < words.length; i++) {
           const word = words[i];
           try {
-            const width = font.widthOfTextAtSize(currentLine + " " + word, size);
+            const width = fontToUse.widthOfTextAtSize(currentLine + " " + word, size);
             if (width < maxWidth) {
               currentLine += " " + word;
             } else {
               lines.push(currentLine);
               currentLine = word;
             }
-          } catch (e) {
-            // Failsafe for measuring width of weird chars if they slipped through
-            // Just force a break if it seems problematic or just append
-            currentLine += " " + word; 
-          }
+          } catch { currentLine += " " + word; }
         }
-        lines.push(currentLine);
+        if (currentLine) lines.push(currentLine);
         return lines;
       };
 
-      // --- CALCULATE TOC SIZE FOR OFFSET ---
-      
-      let tocPageCount = 0;
-      const simulateToc = () => {
-         let pages = 1;
-         let cursorY = pageHeight - margin - 40; // Start after header
+      const addLink = (page: PDFPage, x: number, y: number, w: number, h: number, targetPageIdx: number) => {
+         // targetPageIdx is 0-based index in the NEW pdf
+         if (targetPageIdx < 0 || targetPageIdx >= newPdf.getPageCount()) return;
          
+         const targetPage = newPdf.getPages()[targetPageIdx];
+         const link = newPdf.context.register(
+           newPdf.context.obj({
+             Type: 'Annot',
+             Subtype: 'Link',
+             Rect: [x, y, x + w, y + h],
+             Border: [0, 0, 0],
+             Dest: [targetPage.ref, 'XYZ', null, null, null], 
+           })
+         );
+         page.node.addAnnot(link);
+      };
+
+      // --- STEP 1: CALCULATE TOC SIZE & CREATE PLACEHOLDERS ---
+
+      let tocPageCount = 0;
+      // Simulation to count pages
+      {
+         let pages = 1;
+         let cursorY = pageHeight - margin - 60; // Header space
          data.toc.forEach(entry => {
-             // Title wrapping
-             const indent = (entry.level - 1) * 20;
-             const availableWidth = contentWidth - indent - 40; // 40 for page num
+             const indent = (entry.level - 1) * 15;
+             const availableWidth = contentWidth - indent - 40; 
              const lines = wrapText(entry.title, availableWidth, entry.level === 1 ? boldFont : font, fontSize);
-             
              lines.forEach(() => {
-                if (cursorY < margin) {
-                    pages++;
-                    cursorY = pageHeight - margin;
-                }
+                if (cursorY < margin) { pages++; cursorY = pageHeight - margin; }
                 cursorY -= lineHeight;
              });
-             cursorY -= 4; // spacing
+             cursorY -= 4; 
          });
-         return pages;
-      };
-      
-      tocPageCount = simulateToc();
-      
-      // If using Sequential numbers (file index), page 1 becomes page (1 + tocPageCount).
-      const pageOffset = usePrintedPageNumbers ? 0 : tocPageCount;
+         tocPageCount = pages;
+      }
 
-      // --- RENDER TOC ---
+      // Create ToC Placeholders
+      for (let i = 0; i < tocPageCount; i++) {
+        newPdf.addPage([pageWidth, pageHeight]);
+      }
+
+      // --- STEP 2: APPEND CONTENT ---
+      // The content starts at index `tocPageCount`
+      const contentStartIndex = tocPageCount;
+      const copiedPages = await newPdf.copyPages(originalPdf, originalPdf.getPageIndices());
+      copiedPages.forEach(p => newPdf.addPage(p));
+      const contentEndIndex = newPdf.getPageCount() - 1;
+
+      // Helper to map "Page 5" string to actual PDF index
+      const resolveTargetPage = (pageNumStr: string | number): number => {
+         const p = parseInt(String(pageNumStr).replace(/[^0-9]/g, ''));
+         if (isNaN(p)) return contentStartIndex; // Default to start of content
+         
+         // If using printed numbers, we assume '1' maps to start of content. 
+         // Advanced logic would require a map, but 1-based offset is best guess.
+         // Index 0 of content = Page 1
+         const target = contentStartIndex + (p - 1);
+         if (target > contentEndIndex) return contentEndIndex;
+         if (target < contentStartIndex) return contentStartIndex;
+         return target;
+      };
+
+      // --- STEP 3: GENERATE INDEX (Backside) ---
       
-      let currentPage = newPdf.addPage([pageWidth, pageHeight]);
+      let indexPage = newPdf.addPage([pageWidth, pageHeight]);
       let cursorY = pageHeight - margin;
       
-      // ToC Header
-      currentPage.drawText('Table of Contents', { x: margin, y: cursorY, size: 24, font: boldFont });
-      cursorY -= 40;
+      // Header
+      indexPage.drawText('Alphabetical Index', { x: margin, y: cursorY, size: headerSize, font: boldFont });
+      indexPage.drawLine({ start: { x: margin, y: cursorY - 10 }, end: { x: pageWidth - margin, y: cursorY - 10 }, thickness: 1, color: rgb(0,0,0) });
+      cursorY -= 50;
+
+      // Layout columns
+      const colGap = 30;
+      const colWidth = (contentWidth - colGap) / 2;
+      let currentCol = 0;
+      let y0 = cursorY;
+      let y1 = cursorY;
+
+      // Group by letter
+      const groupedIndex: Record<string, typeof data.index> = {};
+      data.index.forEach(item => {
+        const letter = item.term.charAt(0).toUpperCase();
+        const key = /[A-Z]/.test(letter) ? letter : '#';
+        if (!groupedIndex[key]) groupedIndex[key] = [];
+        groupedIndex[key].push(item);
+      });
+      const sortedKeys = Object.keys(groupedIndex).sort();
+
+      sortedKeys.forEach(letter => {
+         // Section Header (e.g., "A")
+         let targetY = currentCol === 0 ? y0 : y1;
+         if (targetY < margin + 40) {
+            // New Page / Column switch
+            if (currentCol === 0) {
+                currentCol = 1; targetY = cursorY; y1 = cursorY;
+            } else {
+                indexPage = newPdf.addPage([pageWidth, pageHeight]);
+                cursorY = pageHeight - margin;
+                currentCol = 0; y0 = cursorY; y1 = cursorY; targetY = cursorY;
+            }
+         }
+         
+         // Draw Letter Header
+         const xBase = margin + (currentCol * (colWidth + colGap));
+         indexPage.drawText(letter, { x: xBase, y: targetY, size: 14, font: boldFont });
+         indexPage.drawLine({ start: { x: xBase, y: targetY - 2 }, end: { x: xBase + colWidth, y: targetY - 2 }, thickness: 0.5, color: rgb(0.5,0.5,0.5) });
+         targetY -= 20;
+
+         // Draw Items
+         groupedIndex[letter].forEach(item => {
+             const term = sanitize(item.term);
+             const termLines = wrapText(term, colWidth, boldFont, 10);
+             
+             // Measure height needed (term lines + context lines + 1 line for page nums)
+             const contextSafe = item.context ? sanitize(item.context) : null;
+             const contextLines = contextSafe ? wrapText(contextSafe, colWidth, italicFont, 9) : [];
+             const totalH = (termLines.length * 11) + (contextLines.length * 10) + 12 + 6;
+
+             // Check overflow
+             if (targetY - totalH < margin) {
+                if (currentCol === 0) {
+                    currentCol = 1; targetY = cursorY; y1 = targetY;
+                } else {
+                    indexPage = newPdf.addPage([pageWidth, pageHeight]);
+                    cursorY = pageHeight - margin;
+                    currentCol = 0; y0 = cursorY; y1 = cursorY; targetY = cursorY;
+                }
+             }
+
+             const drawX = margin + (currentCol * (colWidth + colGap));
+             
+             // Draw Term
+             termLines.forEach(l => {
+                 indexPage.drawText(l, { x: drawX, y: targetY, size: 10, font: boldFont });
+                 targetY -= 11;
+             });
+
+             // Draw Context
+             contextLines.forEach(l => {
+                 indexPage.drawText(l, { x: drawX, y: targetY, size: 9, font: italicFont, color: rgb(0.3, 0.3, 0.3) });
+                 targetY -= 10;
+             });
+
+             // Draw Page Numbers (Flow Layout)
+             let currentX = drawX;
+             const pageNums = item.pageNumbers;
+             pageNums.forEach((pNum, idx) => {
+                 const pStr = String(pNum);
+                 const pWidth = font.widthOfTextAtSize(pStr, 10);
+                 const commaW = font.widthOfTextAtSize(", ", 10);
+                 
+                 // Wrap page numbers if needed
+                 if (currentX + pWidth > drawX + colWidth) {
+                     targetY -= 11;
+                     currentX = drawX;
+                 }
+                 
+                 indexPage.drawText(pStr, { x: currentX, y: targetY, size: 10, font, color: rgb(0, 0, 0.7) });
+                 
+                 // ADD LINK
+                 const targetIdx = resolveTargetPage(pStr);
+                 addLink(indexPage, currentX, targetY, pWidth, 10, targetIdx);
+
+                 currentX += pWidth;
+                 if (idx < pageNums.length - 1) {
+                     indexPage.drawText(", ", { x: currentX, y: targetY, size: 10, font });
+                     currentX += commaW;
+                 }
+             });
+             targetY -= 14; // Spacing after item
+
+             // Update column cursors
+             if (currentCol === 0) y0 = targetY; else y1 = targetY;
+         });
+         
+         // Spacing after letter group
+         if (currentCol === 0) y0 -= 10; else y1 -= 10;
+      });
+
+
+      // --- STEP 4: FILL TOC (Frontside) ---
+      
+      const tocPages = newPdf.getPages().slice(0, tocPageCount);
+      let tocPageIndex = 0;
+      let currentTocPage = tocPages[0];
+      cursorY = pageHeight - margin;
+
+      // Header
+      currentTocPage.drawText('Table of Contents', { 
+          x: pageWidth / 2 - boldFont.widthOfTextAtSize('Table of Contents', headerSize) / 2, 
+          y: cursorY, 
+          size: headerSize, 
+          font: boldFont 
+      });
+      cursorY -= 50;
 
       data.toc.forEach(entry => {
          const entryFont = entry.level === 1 ? boldFont : font;
-         const indent = (entry.level - 1) * 20;
+         const entrySize = entry.level === 1 ? 11 : 10;
+         const indent = (entry.level - 1) * 15;
          const numWidth = 30;
-         const titleWidth = contentWidth - indent - numWidth;
+         const titleWidth = contentWidth - indent - numWidth - 10; // 10 gap
 
-         const lines = wrapText(entry.title, titleWidth, entryFont, fontSize);
+         const lines = wrapText(entry.title, titleWidth, entryFont, entrySize);
          
-         // Parse page number to see if we can apply offset
-         let displayPage = entry.pageNumber.toString();
-         if (pageOffset > 0) {
-            const num = parseInt(displayPage);
-            if (!isNaN(num)) {
-               displayPage = (num + pageOffset).toString();
-            }
-         }
+         const pStr = String(entry.pageNumber);
+         const targetIdx = resolveTargetPage(pStr);
 
          lines.forEach((line, idx) => {
            if (cursorY < margin) {
-             currentPage = newPdf.addPage([pageWidth, pageHeight]);
-             cursorY = pageHeight - margin;
+             tocPageIndex++;
+             if (tocPageIndex < tocPages.length) {
+                 currentTocPage = tocPages[tocPageIndex];
+                 cursorY = pageHeight - margin;
+             }
            }
 
-           currentPage.drawText(line, { x: margin + indent, y: cursorY, size: fontSize, font: entryFont });
+           // Draw Title
+           currentTocPage.drawText(line, { x: margin + indent, y: cursorY, size: entrySize, font: entryFont });
            
-           // Page Num
+           // If last line of title, draw dots and page number
            if (idx === lines.length - 1) {
-             const pWidth = font.widthOfTextAtSize(displayPage, fontSize);
-             currentPage.drawText(displayPage, { x: pageWidth - margin - pWidth, y: cursorY, size: fontSize, font });
+             const titleLineWidth = entryFont.widthOfTextAtSize(line, entrySize);
+             const startDotX = margin + indent + titleLineWidth + 5;
+             const endDotX = pageWidth - margin - 35; 
+             
+             // Draw Dotted Leader
+             if (endDotX > startDotX) {
+                const dot = ".";
+                const dotW = font.widthOfTextAtSize(dot, 10);
+                const spaceAvailable = endDotX - startDotX;
+                const dotCount = Math.floor(spaceAvailable / (dotW + 2));
+                const dots = Array(dotCount).fill(".").join(" ");
+                currentTocPage.drawText(dots, { x: startDotX, y: cursorY, size: 8, font, color: rgb(0.5,0.5,0.5) });
+             }
+
+             // Draw Page Number
+             const pWidth = font.widthOfTextAtSize(pStr, entrySize);
+             currentTocPage.drawText(pStr, { x: pageWidth - margin - pWidth, y: cursorY, size: entrySize, font: entryFont });
+
+             // ADD LINK (Covering the whole line)
+             addLink(currentTocPage, margin, cursorY - 2, pageWidth - (margin * 2), entrySize + 4, targetIdx);
            }
 
            cursorY -= lineHeight;
          });
-         cursorY -= 4; // Extra spacing between entries
+         cursorY -= 4; 
       });
 
-      // --- APPEND ORIGINAL PDF ---
-      
-      const copiedPages = await newPdf.copyPages(originalPdf, originalPdf.getPageIndices());
-      copiedPages.forEach((page) => newPdf.addPage(page));
-
-      // --- RENDER INDEX ---
-
-      currentPage = newPdf.addPage([pageWidth, pageHeight]);
-      cursorY = pageHeight - margin;
-      
-      // Index Header
-      currentPage.drawText('Index', { x: margin, y: cursorY, size: 24, font: boldFont });
-      cursorY -= 40;
-
-      // Two column layout for Index
-      const colGap = 20;
-      const colWidth = (contentWidth - colGap) / 2;
-      let currentCol = 0; // 0 or 1
-      let y0 = cursorY;
-      let y1 = cursorY;
-      
-      const addToIndex = (term: string, pages: string[], context?: string) => {
-         const pageStr = pages.map(p => {
-             if (pageOffset > 0) {
-                 const n = parseInt(p.toString());
-                 return isNaN(n) ? p : (n + pageOffset);
-             }
-             return p;
-         }).join(', ');
-         
-         const fullText = `${term}: ${pageStr}`;
-         const contextText = context ? `(${context})` : null;
-
-         const termLines = wrapText(fullText, colWidth, boldFont, 10);
-         const contextLines = contextText ? wrapText(contextText, colWidth, font, 9) : [];
-         
-         const totalHeight = (termLines.length * 12) + (contextLines.length * 11) + 6;
-
-         // Check availability in current column
-         let targetY = (currentCol === 0) ? y0 : y1;
-
-         if (targetY - totalHeight < margin) {
-             // Column full
-             if (currentCol === 0) {
-                 currentCol = 1;
-                 targetY = cursorY; // Reset to top
-                 y1 = cursorY;
-             } else {
-                 // Page full
-                 currentPage = newPdf.addPage([pageWidth, pageHeight]);
-                 cursorY = pageHeight - margin;
-                 y0 = cursorY;
-                 y1 = cursorY;
-                 currentCol = 0;
-                 targetY = cursorY;
-             }
-         }
-
-         // Draw
-         const xBase = margin + (currentCol * (colWidth + colGap));
-         let drawY = targetY;
-
-         termLines.forEach(l => {
-             currentPage.drawText(l, { x: xBase, y: drawY, size: 10, font: boldFont });
-             drawY -= 12;
-         });
-         
-         if (contextLines.length > 0) {
-             contextLines.forEach(l => {
-                 currentPage.drawText(l, { x: xBase, y: drawY, size: 9, font: font, color: rgb(0.4, 0.4, 0.4) });
-                 drawY -= 11;
-             });
-         }
-
-         // Update cursor
-         drawY -= 6; // padding
-         if (currentCol === 0) y0 = drawY;
-         else y1 = drawY;
-      };
-
-      data.index.forEach(item => {
-          addToIndex(item.term, item.pageNumbers.map(String), item.context);
-      });
 
       // --- SAVE ---
       const pdfBytes = await newPdf.save();
@@ -277,7 +358,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = originalFile.name.replace('.pdf', '_indexed.pdf');
+      a.download = originalFile.name.replace('.pdf', '_pro_indexed.pdf');
       a.click();
       URL.revokeObjectURL(url);
 
