@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Upload, Info } from 'lucide-react';
+import { Upload, FileUp } from 'lucide-react';
 
 interface FileUploaderProps {
   onFileSelect: (file: File) => void;
@@ -25,16 +25,16 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelect, isLoad
   };
 
   return (
-    <div className="w-full max-w-xl mx-auto">
+    <div className="w-full">
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         onClick={() => !isLoading && fileInputRef.current?.click()}
         className={`
-          group relative border border-dashed rounded-xl p-16 text-center transition-all duration-500 cursor-pointer overflow-hidden
+          group relative border border-dashed rounded-2xl p-12 text-center transition-all duration-300 cursor-pointer overflow-hidden
           ${isLoading 
-            ? 'border-white/5 bg-white/5 opacity-50 cursor-not-allowed' 
-            : 'border-white/20 bg-transparent hover:border-white/50 hover:bg-white/5'
+            ? 'border-white/5 bg-white/[0.02] cursor-not-allowed opacity-60' 
+            : 'border-white/10 bg-transparent hover:border-white/30 hover:bg-white/[0.02]'
           }
         `}
       >
@@ -47,26 +47,22 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelect, isLoad
           disabled={isLoading}
         />
         
-        <div className="flex flex-col items-center gap-6 relative z-10">
-          <div className={`p-4 rounded-full transition-transform duration-500 group-hover:scale-110 ${isLoading ? 'bg-white/5' : 'bg-white/5 text-white'}`}>
-            <Upload size={24} strokeWidth={1.5} />
+        <div className="flex flex-col items-center gap-5 relative z-10">
+          <div className={`
+             p-4 rounded-2xl transition-all duration-500
+             ${isLoading ? 'bg-white/5 text-gray-500' : 'bg-zinc-900 border border-white/10 text-white shadow-lg shadow-black/50 group-hover:scale-105 group-hover:border-white/20'}
+          `}>
+            {isLoading ? <FileUp size={28} className="animate-pulse" /> : <Upload size={28} strokeWidth={1.5} />}
           </div>
-          <div className="space-y-2">
-            <h3 className="text-lg font-medium text-white tracking-wide">
-              {isLoading ? 'Processing Document...' : 'Upload Document'}
+          <div className="space-y-1.5">
+            <h3 className="text-base font-medium text-gray-200 tracking-wide">
+              {isLoading ? 'Processing...' : 'Upload Textook'}
             </h3>
-            <p className="text-gray-500 text-sm font-light">
-              Drag and drop or click to browse
+            <p className="text-gray-500 text-xs font-light">
+              PDF, Images, or Text files
             </p>
           </div>
         </div>
-      </div>
-      
-      <div className="mt-8 flex items-center justify-center gap-2 text-gray-500 text-xs font-light opacity-60">
-        <Info size={12} />
-        <p>
-          Supported formats: Documents & Images
-        </p>
       </div>
     </div>
   );

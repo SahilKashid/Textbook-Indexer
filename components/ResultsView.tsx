@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
-import { Download, Book, List, Search, Loader2 } from 'lucide-react';
+import { Download, Book, List, Search, Loader2, ChevronRight, Hash } from 'lucide-react';
 import { PDFDocument, rgb, StandardFonts, PDFName, PDFPage, PDFArray } from 'pdf-lib';
 
 interface ResultsViewProps {
@@ -360,7 +360,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = originalFile.name.replace('.pdf', '_pro_indexed.pdf');
+      a.download = originalFile.name.replace('.pdf', '_indexed.pdf');
       a.click();
       URL.revokeObjectURL(url);
 
@@ -471,50 +471,69 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto bg-zinc-900 border border-white/10 rounded-xl overflow-hidden flex flex-col h-[650px] shadow-2xl shadow-black/50">
-      {/* Header / Tabs */}
-      <div className="bg-black/40 border-b border-white/5 p-4 flex flex-col sm:flex-row justify-between items-center gap-4 relative z-20">
-        <div className="flex bg-white/5 p-1 rounded-lg">
+    <div className="w-full h-full bg-[#0A0A0A] border border-white/5 rounded-2xl overflow-hidden flex flex-col shadow-2xl shadow-black/80 ring-1 ring-white/[0.02]">
+      {/* Header Area */}
+      <div className="bg-black/40 border-b border-white/5 px-4 h-16 flex items-center justify-between gap-4 backdrop-blur-md">
+        
+        {/* Modern Tabs */}
+        <div className="flex bg-white/[0.03] p-1 rounded-lg border border-white/[0.02]">
           <button
             onClick={() => setActiveTab('toc')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${
               activeTab === 'toc' 
-                ? 'bg-zinc-800 text-white shadow-sm' 
+                ? 'bg-zinc-800 text-white shadow-sm ring-1 ring-white/5' 
                 : 'text-gray-500 hover:text-gray-300'
             }`}
           >
-            <Book size={14} /> Table of Contents
+            <Book size={13} /> Table of Contents
           </button>
           <button
             onClick={() => setActiveTab('index')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-300 ${
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${
               activeTab === 'index' 
-                ? 'bg-zinc-800 text-white shadow-sm' 
+                ? 'bg-zinc-800 text-white shadow-sm ring-1 ring-white/5' 
                 : 'text-gray-500 hover:text-gray-300'
             }`}
           >
-            <List size={14} /> Index
+            <List size={13} /> Index
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-           <div className="relative group">
+        {/* Action Area */}
+        <div className="flex items-center gap-3">
+          {activeTab === 'index' && (
+             <div className="relative group hidden sm:block">
+               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-white transition-colors" size={13} />
+               <input 
+                 type="text" 
+                 placeholder="Filter terms..." 
+                 className="w-48 pl-8 pr-3 py-1.5 bg-black/20 border border-white/10 rounded-full text-xs text-gray-200 focus:outline-none focus:border-white/20 focus:bg-white/5 transition-all placeholder:text-gray-600 focus:w-64"
+                 value={searchTerm}
+                 onChange={(e) => setSearchTerm(e.target.value)}
+               />
+             </div>
+          )}
+
+           <div className="relative group z-30">
               <button 
                 disabled={isGeneratingPdf}
-                className={`flex items-center gap-2 px-4 py-2 bg-white text-black hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors ${isGeneratingPdf ? 'opacity-70 cursor-wait' : ''}`}
+                className={`flex items-center gap-2 px-4 py-1.5 bg-white text-black hover:bg-gray-200 rounded-lg text-xs font-medium transition-colors ${isGeneratingPdf ? 'opacity-70 cursor-wait' : ''}`}
               >
-                {isGeneratingPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
+                {isGeneratingPdf ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} 
                 {isGeneratingPdf ? 'Building PDF...' : 'Export'}
               </button>
               
               {!isGeneratingPdf && (
-                <div className="absolute right-0 top-full mt-2 w-32 bg-zinc-900 rounded-lg shadow-xl border border-white/10 hidden group-hover:block z-50 overflow-hidden">
-                  <button onClick={() => downloadData('pdf')} className="w-full text-left px-4 py-3 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors border-b border-white/5">
-                    {originalFile?.type === 'application/pdf' ? 'Full PDF' : 'PDF Report'}
-                  </button>
-                  <button onClick={() => downloadData('json')} className="w-full text-left px-4 py-3 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors">JSON</button>
-                  <button onClick={() => downloadData('md')} className="w-full text-left px-4 py-3 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors">Markdown</button>
-                  <button onClick={() => downloadData('csv')} className="w-full text-left px-4 py-3 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors">CSV</button>
+                <div className="absolute right-0 top-full mt-2 w-40 bg-[#111] rounded-xl shadow-2xl border border-white/10 hidden group-hover:block overflow-hidden backdrop-blur-xl">
+                  <div className="p-1">
+                    <button onClick={() => downloadData('pdf')} className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors rounded-lg flex items-center justify-between group/item">
+                      {originalFile?.type === 'application/pdf' ? 'Merged PDF' : 'PDF Report'}
+                    </button>
+                    <div className="h-px bg-white/5 my-1 mx-2"></div>
+                    <button onClick={() => downloadData('json')} className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors rounded-lg">JSON Data</button>
+                    <button onClick={() => downloadData('md')} className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors rounded-lg">Markdown</button>
+                    <button onClick={() => downloadData('csv')} className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors rounded-lg">CSV Spreadsheet</button>
+                  </div>
                 </div>
               )}
            </div>
@@ -524,62 +543,80 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       {/* Content Area */}
       <div className="flex-1 overflow-hidden relative bg-black/20">
         {activeTab === 'toc' ? (
-          <div className="h-full overflow-y-auto p-8 space-y-1">
+          <div className="h-full overflow-y-auto p-8 custom-scrollbar">
             {data.toc.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-600">
-                <p>No content generated.</p>
+              <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-2">
+                <Book size={32} className="opacity-20" />
+                <p className="text-sm font-light">No chapters detected.</p>
               </div>
             ) : (
-              data.toc.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  className={`
-                    flex justify-between items-baseline py-3 border-b border-dashed border-white/5 hover:bg-white/[0.02] px-3 rounded transition-colors
-                    ${item.level === 1 ? 'font-medium text-white mt-6 mb-2 border-white/10' : ''}
-                    ${item.level === 2 ? 'pl-8 text-gray-300 font-light' : ''}
-                    ${item.level === 3 ? 'pl-16 text-gray-500 text-sm font-light' : ''}
-                  `}
-                >
-                  <span className="tracking-wide">{item.title}</span>
-                  <span className="text-gray-600 text-xs font-mono shrink-0 ml-4">{item.pageNumber}</span>
-                </div>
-              ))
+              <div className="max-w-3xl mx-auto space-y-1">
+                {data.toc.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`
+                      relative flex items-baseline py-2 px-4 rounded-lg group hover:bg-white/[0.02] transition-colors
+                      ${item.level === 1 ? 'mt-6 mb-2' : ''}
+                    `}
+                  >
+                    {/* Visual Hierarchy Lines */}
+                    {item.level > 1 && (
+                      <div className="absolute left-4 top-0 bottom-1/2 w-px bg-white/5 border-l border-dashed border-white/10"></div>
+                    )}
+                    {item.level > 1 && (
+                       <div className="absolute left-4 top-1/2 w-3 h-px bg-white/10"></div>
+                    )}
+                    
+                    <div 
+                        className={`flex-1 flex items-baseline gap-4 ${item.level === 1 ? 'ml-0' : item.level === 2 ? 'ml-8' : 'ml-16'}`}
+                    >
+                      <span className={`tracking-wide ${item.level === 1 ? 'text-sm font-medium text-white' : 'text-xs text-gray-400 group-hover:text-gray-200'}`}>
+                        {item.title}
+                      </span>
+                      
+                      {/* Dotted Leader */}
+                      <div className="flex-1 border-b border-dashed border-white/10 opacity-30 mx-2 relative top-[-4px]"></div>
+                      
+                      <span className={`font-mono text-[10px] ${item.level === 1 ? 'text-white' : 'text-gray-600 group-hover:text-gray-400'}`}>
+                        {item.pageNumber}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         ) : (
           <div className="h-full flex flex-col">
-             <div className="p-4 border-b border-white/5 bg-black/40 sticky top-0 z-10 backdrop-blur-md">
-                <div className="relative max-w-md mx-auto">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
-                  <input 
-                    type="text" 
-                    placeholder="Search terms..." 
-                    className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-full text-sm text-gray-200 focus:outline-none focus:border-white/30 focus:bg-white/10 transition-all placeholder:text-gray-600"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-             </div>
-             <div className="flex-1 overflow-y-auto p-8">
+             {/* Mobile Search Bar (Only shows on small screens if needed, but keeping unified in header for now) */}
+             <div className="flex-1 overflow-y-auto p-6 sm:p-8 custom-scrollbar">
                 {filteredIndex.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-600">
-                    <p>No matching terms.</p>
+                  <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-2">
+                    <Search size={32} className="opacity-20" />
+                    <p className="text-sm font-light">No matching terms found.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-1">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredIndex.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-start py-3 border-b border-white/5 hover:bg-white/[0.02] px-2 rounded group transition-colors">
-                        <div className="pr-4">
-                          <span className="text-gray-300 font-light tracking-wide group-hover:text-white transition-colors">{item.term}</span>
-                          {item.context && <p className="text-[10px] text-gray-600 mt-1 line-clamp-1">{item.context}</p>}
+                      <div key={idx} className="flex flex-col p-4 rounded-xl border border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-colors group">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="text-sm font-medium text-gray-200 group-hover:text-white transition-colors">{item.term}</span>
+                          <div className="flex flex-wrap justify-end gap-1 ml-2 max-w-[50%]">
+                             {item.pageNumbers.slice(0, 3).map((p, pIdx) => (
+                                <span key={pIdx} className="inline-block bg-white/5 text-gray-500 text-[10px] px-1.5 py-0.5 rounded font-mono border border-white/5">
+                                  {p}
+                                </span>
+                             ))}
+                             {item.pageNumbers.length > 3 && (
+                               <span className="text-[10px] text-gray-600 px-1">+{item.pageNumbers.length - 3}</span>
+                             )}
+                          </div>
                         </div>
-                        <div className="text-right shrink-0 max-w-[40%] flex flex-wrap justify-end gap-1">
-                          {item.pageNumbers.map((p, pIdx) => (
-                            <span key={pIdx} className="inline-block bg-white/5 text-gray-500 text-[10px] px-1.5 py-0.5 rounded font-mono hover:bg-white/10 hover:text-gray-300 cursor-default transition-colors">
-                              {p}
-                            </span>
-                          ))}
-                        </div>
+                        {item.context && (
+                            <p className="text-[11px] text-gray-500 leading-relaxed line-clamp-2 group-hover:text-gray-400 transition-colors">
+                                {item.context}
+                            </p>
+                        )}
                       </div>
                     ))}
                   </div>
