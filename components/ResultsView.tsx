@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
 import { Download, Book, List, Search, Loader2 } from 'lucide-react';
-import { PDFDocument, rgb, StandardFonts, PDFName, PDFPage, PDFArray } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 interface ResultsViewProps {
   data: AnalysisResult;
@@ -69,35 +69,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
         return lines;
       };
 
-      // Correctly create PDF Link Annotations using PDFName objects
-      const addLink = (page: PDFPage, x: number, y: number, w: number, h: number, targetPageIdx: number) => {
-         if (targetPageIdx < 0 || targetPageIdx >= newPdf.getPageCount()) return;
-         
-         const targetPage = newPdf.getPages()[targetPageIdx];
-         
-         // CRITICAL FIX: Use PDFName.of() for Enum values.
-         // Rect coordinates: [LLx, LLy, URx, URy]
-         const linkDict = newPdf.context.obj({
-             Type: PDFName.of('Annot'),
-             Subtype: PDFName.of('Link'),
-             Rect: [x, y - 2, x + w, y + h + 2], 
-             Border: [0, 0, 0],
-             // Destination: [PageRef, /XYZ, left, top, zoom]
-             Dest: [targetPage.ref, PDFName.of('XYZ'), null, null, null],
-         });
-         
-         const linkRef = newPdf.context.register(linkDict);
-         
-         const pageNode = page.node;
-         let annots = pageNode.lookup(PDFName.of('Annots'));
-         
-         if (annots instanceof PDFArray) {
-             annots.push(linkRef);
-         } else {
-             pageNode.set(PDFName.of('Annots'), newPdf.context.obj([linkRef]));
-         }
-      };
-
       // --- STEP 1: CALCULATE TOC SIZE ---
       let tocPageCount = 0;
       {
@@ -126,24 +97,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       }
 
       // --- STEP 2: APPEND CONTENT ---
-      const contentStartIndex = tocPageCount;
+      // We append the original content pages after the ToC pages
       const copiedPages = await newPdf.copyPages(originalPdf, originalPdf.getPageIndices());
       copiedPages.forEach(p => newPdf.addPage(p));
-      const contentEndIndex = newPdf.getPageCount() - 1;
-
-      // Robust parsing of page numbers
-      const resolveTargetPage = (originalPageNumStr: string | number): number => {
-         const match = String(originalPageNumStr).match(/(\d+)/);
-         const p = match ? parseInt(match[0]) : NaN;
-         
-         if (isNaN(p)) return contentStartIndex; 
-         
-         const target = contentStartIndex + (p - 1);
-         if (target > contentEndIndex) return contentEndIndex;
-         if (target < contentStartIndex) return contentStartIndex;
-         return target;
-      };
-
+      
       // --- STEP 3: GENERATE INDEX ---
       let indexPage = newPdf.addPage([pageWidth, pageHeight]);
       let cursorY = pageHeight - margin;
@@ -243,12 +200,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
                  
                  indexPage.drawText(displayPageStr, { x: currentX, y: targetY, size: 10, font });
                  
-                 const numW = font.widthOfTextAtSize(displayPageStr, 10);
-                 const targetIdx = resolveTargetPage(originalPageStr);
-                 addLink(indexPage, currentX, targetY - 2, numW, 12, targetIdx);
-
                  if (!isLast) {
-                     indexPage.drawText(", ", { x: currentX + numW, y: targetY, size: 10, font });
+                     indexPage.drawText(", ", { x: currentX + textW, y: targetY, size: 10, font });
                  }
 
                  currentX += textW;
@@ -292,8 +245,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
             displayPageStr = (pInt + pageOffset).toString();
          }
 
-         const targetIdx = resolveTargetPage(originalPageStr);
-
          lines.forEach((line, idx) => {
            if (cursorY < margin) {
              tocPageIndex++;
@@ -321,9 +272,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
              const pWidth = font.widthOfTextAtSize(displayPageStr, entrySize);
              currentTocPage.drawText(displayPageStr, { x: pageWidth - margin - pWidth, y: cursorY, size: entrySize, font: entryFont });
-
-             // Full line link for ToC
-             addLink(currentTocPage, margin, cursorY - 2, pageWidth - (margin * 2), entrySize + 4, targetIdx);
            }
            cursorY -= lineHeight;
          });
