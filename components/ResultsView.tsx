@@ -198,12 +198,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
                      currentX = drawX + 10; // Indent
                  }
                  
-                 indexPage.drawText(displayPageStr, { x: currentX, y: targetY, size: 10, font });
+                 // Draw the entire number block (number + suffix) at once to avoid positioning errors
+                 indexPage.drawText(textToDraw, { x: currentX, y: targetY, size: 10, font });
                  
-                 if (!isLast) {
-                     indexPage.drawText(", ", { x: currentX + textW, y: targetY, size: 10, font });
-                 }
-
                  currentX += textW;
              });
              
