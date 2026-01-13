@@ -56,11 +56,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onFileSelect, isLoad
           </div>
           <div className="space-y-1.5">
             <h3 className="text-base font-medium text-gray-200 tracking-wide">
-              {isLoading ? 'Processing...' : 'Upload Textook'}
+              {isLoading ? 'Processing...' : 'Upload Textbook'}
             </h3>
-            <p className="text-gray-500 text-xs font-light">
-              PDF, Images, or Text files
-            </p>
           </div>
         </div>
       </div>
