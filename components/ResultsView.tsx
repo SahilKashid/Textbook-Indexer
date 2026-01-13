@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
 import { Download, Book, List, Search, Loader2 } from 'lucide-react';
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts, PDFName, PDFArray, PDFPage } from 'pdf-lib';
 
 interface ResultsViewProps {
   data: AnalysisResult;
@@ -101,6 +101,44 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       const copiedPages = await newPdf.copyPages(originalPdf, originalPdf.getPageIndices());
       copiedPages.forEach(p => newPdf.addPage(p));
       
+      // --- HELPER: ADD LINK ---
+      const addLink = (page: PDFPage, rect: number[], targetRef: any) => {
+        const linkAnnot = newPdf.context.obj({
+          Type: PDFName.of('Annot'),
+          Subtype: PDFName.of('Link'),
+          Rect: rect,
+          Border: [0, 0, 0],
+          A: newPdf.context.obj({
+            Type: PDFName.of('Action'),
+            S: PDFName.of('GoTo'),
+            D: [targetRef, PDFName.of('Fit')]
+          })
+        });
+        
+        const ref = newPdf.context.register(linkAnnot);
+        
+        const annots = page.node.Annots();
+        if (annots instanceof PDFArray) {
+            annots.push(ref);
+        } else {
+            page.node.set(PDFName.of('Annots'), newPdf.context.obj([ref]));
+        }
+      };
+
+      const resolveTargetPage = (pageVal: string | number): PDFPage | null => {
+         const match = String(pageVal).match(/(\d+)/);
+         if (!match) return null;
+         const pageNum = parseInt(match[0], 10);
+         // Map original page number to new PDF structure
+         // Original Page 1 is at index `tocPageCount`.
+         const targetIndex = tocPageCount + (pageNum - 1);
+         const pages = newPdf.getPages();
+         if (targetIndex >= 0 && targetIndex < pages.length) {
+             return pages[targetIndex];
+         }
+         return null;
+      };
+
       // --- STEP 3: GENERATE INDEX ---
       let indexPage = newPdf.addPage([pageWidth, pageHeight]);
       let cursorY = pageHeight - margin;
@@ -198,8 +236,15 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
                      currentX = drawX + 10; // Indent
                  }
                  
-                 // Draw the entire number block (number + suffix) at once to avoid positioning errors
+                 // Draw text
                  indexPage.drawText(textToDraw, { x: currentX, y: targetY, size: 10, font });
+                 
+                 // ADD LINK
+                 const targetPage = resolveTargetPage(pNum);
+                 if (targetPage) {
+                    const rect = [currentX, targetY - 2, currentX + textW, targetY + 10];
+                    addLink(indexPage, rect, targetPage.ref);
+                 }
                  
                  currentX += textW;
              });
@@ -269,6 +314,14 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
              const pWidth = font.widthOfTextAtSize(displayPageStr, entrySize);
              currentTocPage.drawText(displayPageStr, { x: pageWidth - margin - pWidth, y: cursorY, size: entrySize, font: entryFont });
+             
+             // ADD LINK TO TOC ENTRY (Entire line)
+             const targetPage = resolveTargetPage(entry.pageNumber);
+             if (targetPage) {
+                // Rectangle covering title and page number
+                const rect = [margin + indent, cursorY - 3, pageWidth - margin, cursorY + entrySize + 2];
+                addLink(currentTocPage, rect, targetPage.ref);
+             }
            }
            cursorY -= lineHeight;
          });
