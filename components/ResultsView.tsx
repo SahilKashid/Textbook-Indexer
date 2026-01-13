@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from '../types';
 import { Download, Book, List, Search, Loader2 } from 'lucide-react';
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
 interface ResultsViewProps {
@@ -27,21 +27,40 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       const originalPdfBytes = await originalFile.arrayBuffer();
       const originalPdf = await PDFDocument.load(originalPdfBytes);
       
-      // Register fontkit to support custom fonts
+      // Register fontkit instance to support custom fonts (required for Unicode)
       originalPdf.registerFontkit(fontkit);
       
       const newPdf = await PDFDocument.create();
       newPdf.registerFontkit(fontkit);
 
-      // Fetch Unicode-compatible fonts (Roboto)
-      // We use these instead of StandardFonts to avoid WinAnsi encoding errors with special characters
-      const [fontBytes, boldFontBytes] = await Promise.all([
-        fetch('https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.ttf').then(res => res.arrayBuffer()),
-        fetch('https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlfBBc4.ttf').then(res => res.arrayBuffer())
-      ]);
+      // --- FONT LOADING LOGIC ---
+      let font: any;
+      let boldFont: any;
+      let usingFallbackFont = false;
 
-      const font = await newPdf.embedFont(fontBytes);
-      const boldFont = await newPdf.embedFont(boldFontBytes);
+      try {
+        // Attempt to load Unicode-compatible fonts from a stable CDN (jsDelivr/GitHub)
+        // Correct path for Roboto in google/fonts repo is 'ofl/roboto'
+        const loadFont = async (url: string) => {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Failed to fetch font from ${url}: ${res.statusText}`);
+            return await res.arrayBuffer();
+        };
+
+        const [fontBytes, boldFontBytes] = await Promise.all([
+          loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Regular.ttf'),
+          loadFont('https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/Roboto-Bold.ttf')
+        ]);
+
+        font = await newPdf.embedFont(fontBytes);
+        boldFont = await newPdf.embedFont(boldFontBytes);
+      } catch (fontError) {
+        console.warn("Failed to load custom fonts, falling back to StandardFonts.", fontError);
+        // Fallback to standard fonts if network fails
+        font = await newPdf.embedFont(StandardFonts.Helvetica);
+        boldFont = await newPdf.embedFont(StandardFonts.HelveticaBold);
+        usingFallbackFont = true;
+      }
 
       const fontSize = 11;
       const lineHeight = 15;
@@ -53,20 +72,40 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       // --- HELPERS ---
       
       const wrapText = (text: string, maxWidth: number, font: any, size: number): string[] => {
-        // Sanitize newlines to spaces to prevent font measuring errors
-        const safeText = text.replace(/[\n\r]+/g, ' ');
+        // 1. Sanitize newlines to spaces
+        let safeText = text.replace(/[\n\r]+/g, ' ');
+
+        // 2. If using fallback font (StandardFonts), strip/replace unsupported chars to prevent WinAnsi crash
+        if (usingFallbackFont) {
+           safeText = safeText
+             .replace(/–/g, '-')
+             .replace(/—/g, '-')
+             .replace(/“/g, '"')
+             .replace(/”/g, '"')
+             .replace(/’/g, "'")
+             .replace(/•/g, "*")
+             .replace(/…/g, "...")
+             .replace(/[^\x20-\x7E]/g, ''); // Aggressive strip to ASCII printable only for safety
+        }
+
         const words = safeText.split(' ');
         const lines: string[] = [];
         let currentLine = words[0];
 
         for (let i = 1; i < words.length; i++) {
           const word = words[i];
-          const width = font.widthOfTextAtSize(currentLine + " " + word, size);
-          if (width < maxWidth) {
-            currentLine += " " + word;
-          } else {
-            lines.push(currentLine);
-            currentLine = word;
+          try {
+            const width = font.widthOfTextAtSize(currentLine + " " + word, size);
+            if (width < maxWidth) {
+              currentLine += " " + word;
+            } else {
+              lines.push(currentLine);
+              currentLine = word;
+            }
+          } catch (e) {
+            // Failsafe for measuring width of weird chars if they slipped through
+            // Just force a break if it seems problematic or just append
+            currentLine += " " + word; 
           }
         }
         lines.push(currentLine);
@@ -244,8 +283,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
     } catch (e) {
         console.error("Error generating PDF", e);
-        // Fallback or alert logic could be added here
-        alert("Failed to generate PDF. The document might contain unsupported characters or the font failed to load.");
+        alert(`Failed to generate PDF: ${(e as Error).message}`);
     } finally {
         setIsGeneratingPdf(false);
     }
