@@ -147,7 +147,7 @@ const App: React.FC = () => {
                   Structure your <span className="font-normal text-transparent bg-clip-text bg-gradient-to-br from-white via-gray-200 to-gray-500">knowledge.</span>
                 </h2>
                 <p className="max-w-lg mx-auto text-base text-gray-400 font-light leading-relaxed">
-                  Transform textbooks into structured data. Generate professional tables of contents and smart indexes in seconds.
+                  Generate professional tables of contents and smart indexes in seconds.
                 </p>
               </div>
 
