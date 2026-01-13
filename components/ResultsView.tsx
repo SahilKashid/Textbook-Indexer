@@ -180,7 +180,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
       let cursorY = pageHeight - margin;
       
       // Header
-      indexPage.drawText('Alphabetical Index', { x: margin, y: cursorY, size: headerSize, font: boldFont });
+      indexPage.drawText('Index', { x: margin, y: cursorY, size: headerSize, font: boldFont });
       indexPage.drawLine({ start: { x: margin, y: cursorY - 10 }, end: { x: pageWidth - margin, y: cursorY - 10 }, thickness: 1, color: rgb(0,0,0) });
       cursorY -= 50;
 
@@ -314,7 +314,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
 
       data.toc.forEach(entry => {
          const entryFont = entry.level === 1 ? boldFont : font;
-         const entrySize = entry.level === 1 ? 11 : 10;
+         const entrySize = entry.level === 1 ? 12 : 10;
          const indent = (entry.level - 1) * 15;
          const numWidth = 30;
          const titleWidth = contentWidth - indent - numWidth - 10; 
@@ -436,7 +436,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ data, originalFile, us
             `).join('')}
           </div>
           <div class="page-break"></div>
-          <h2>Alphabetical Index</h2>
+          <h2>Index</h2>
           <div class="index-columns">
             ${data.index.map(i => `
               <div class="index-entry">
