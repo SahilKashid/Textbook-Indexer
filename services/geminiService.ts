@@ -39,7 +39,6 @@ export const analyzeChunk = async (
          - DO NOT include sub-sections, sub-headings, or detailed breakdowns within chapters.
          - If a page contains a detailed outline, IGNORE the details and only capture the main Chapter Title.
          - Ignore running headers or footers.
-         - CRITICAL: NEVER use vague titles like "Miscellaneous", "General", "Other", "Front Matter", or "Back Matter". 
          - ALWAYS use specific, descriptive titles derived from the content (e.g., use "Fundamentals of Physics" instead of "Introduction", use "Appendix A: Mathematical Formulas" instead of "Appendix").
          - If a Chapter Title is found, output it ONCE for its starting page. Do not repeat it if it appears in headers on subsequent pages.
       2. An Alphabetical Index of important terms, concepts, and proper nouns.
