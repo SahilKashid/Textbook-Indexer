@@ -39,6 +39,9 @@ export const analyzeChunk = async (
          - DO NOT include sub-sections, sub-headings, or detailed breakdowns within chapters.
          - If a page contains a detailed outline, IGNORE the details and only capture the main Chapter Title.
          - Ignore running headers or footers.
+         - CRITICAL: NEVER use vague titles like "Miscellaneous", "General", "Other", "Front Matter", or "Back Matter". 
+         - ALWAYS use specific, descriptive titles derived from the content (e.g., use "Fundamentals of Physics" instead of "Introduction", use "Appendix A: Mathematical Formulas" instead of "Appendix").
+         - If a Chapter Title is found, output it ONCE for its starting page. Do not repeat it if it appears in headers on subsequent pages.
       2. An Alphabetical Index of important terms, concepts, and proper nouns.
          - Exclude trivial mentions.
 
@@ -49,6 +52,8 @@ export const analyzeChunk = async (
       CRITICAL:
       - KEEP TOC MINIMAL (Parts/Chapters only).
       - Capture EVERY important term for the index.
+      - TITLES MUST BE DESCRIPTIVE AND SPECIFIC.
+      - NO REPETITIVE ENTRIES.
       
       Return JSON.
     `;
@@ -72,6 +77,7 @@ export const analyzeChunk = async (
     promptText = `
       You are an expert textbook editor. Analyze the provided text and extract:
       1. A CONCISE ToC (Parts/Chapters only, NO subsections).
+         - CRITICAL: NO VAGUE TITLES (e.g., "Miscellaneous"). Use specific, descriptive titles only.
       2. An Index.
       The text is a segment of a larger file.
       Return JSON.
@@ -157,12 +163,15 @@ export const mergeAnalysisResults = (results: AnalysisResult[]): AnalysisResult 
   const tocMap = new Map<string, TocEntry>();
 
   allToc.forEach(entry => {
-     // Create a unique key for deduplication: Page + Level + Title
-     // This prevents the same exact heading on the same page from appearing twice (e.g. overlap or error),
-     // but allows "Exercises" on Page 10 and Page 20.
+     // STRICT DEDUPLICATION:
+     // Instead of including Page Number in the key (which allows "Chapter 1" on p10 and p11),
+     // we strictly use Level + Title. 
+     // This ensures we only keep the FIRST occurrence (start page) of any given Chapter/Part.
      const normalizedTitle = entry.title.trim();
-     const key = `${entry.pageNumber}-${entry.level}-${normalizedTitle}`;
+     const key = `${entry.level}-${normalizedTitle.toLowerCase()}`;
      
+     // Only set if not already present. Since results are processed in order, 
+     // this keeps the earliest page occurrence.
      if (!tocMap.has(key)) {
         tocMap.set(key, entry);
      }
