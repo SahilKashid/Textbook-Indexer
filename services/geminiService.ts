@@ -39,8 +39,6 @@ export const analyzeChunk = async (
          - DO NOT include sub-sections, sub-headings, or detailed breakdowns within chapters.
          - If a page contains a detailed outline, IGNORE the details and only capture the main Chapter Title.
          - Ignore running headers or footers.
-         - CRITICAL: NEVER use vague titles like "Miscellaneous", "General", "Other", "Front Matter", or "Back Matter". 
-         - ALWAYS use specific, descriptive titles derived from the content (e.g., use "Fundamentals of Physics" instead of "Introduction", use "Appendix A: Mathematical Formulas" instead of "Appendix").
       2. An Alphabetical Index of important terms, concepts, and proper nouns.
          - Exclude trivial mentions.
 
@@ -51,7 +49,6 @@ export const analyzeChunk = async (
       CRITICAL:
       - KEEP TOC MINIMAL (Parts/Chapters only).
       - Capture EVERY important term for the index.
-      - TITLES MUST BE DESCRIPTIVE AND SPECIFIC.
       
       Return JSON.
     `;
@@ -75,7 +72,6 @@ export const analyzeChunk = async (
     promptText = `
       You are an expert textbook editor. Analyze the provided text and extract:
       1. A CONCISE ToC (Parts/Chapters only, NO subsections).
-         - CRITICAL: NO VAGUE TITLES (e.g., "Miscellaneous"). Use specific, descriptive titles only.
       2. An Index.
       The text is a segment of a larger file.
       Return JSON.
